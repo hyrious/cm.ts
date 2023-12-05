@@ -98,8 +98,11 @@ const handler = function (this: API, e: MessageEvent<IPCRequest>) {
 
   if ('hover' in message) {
     const info = this.getQuickInfoAtPosition(message.hover)
-    const text = ts.displayPartsToString(info.displayParts) + (info.documentation?.length ? '\n' + ts.displayPartsToString(info.documentation) : '')
-    respond({ hover: text })
+    if (!info) respond({ hover: '' })
+    else {
+      const text = ts.displayPartsToString(info.displayParts) + (info.documentation?.length ? '\n' + ts.displayPartsToString(info.documentation) : '')
+      respond({ hover: text })
+    }
   }
 }
 

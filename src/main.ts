@@ -23,11 +23,11 @@ fetch('https://data.jsdelivr.com/v1/package/npm/typescript').then(r => r.ok && r
         ]),
       })
     })
-  : console.error('Failed to fetch TypeScript versions'))
+  : console.error('Failed to fetch TypeScript versions'));
 
-globalThis.sendIPC = sendIPC
+(globalThis as any).sendIPC = sendIPC;
 
-globalThis.view = new EditorView({
+(globalThis as any).view = new EditorView({
   doc: sessionStorage.getItem('doc-cache') || `let a = 1`,
   extensions: [
     minimalSetup,
