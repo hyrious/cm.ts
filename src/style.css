@@ -1,0 +1,6 @@
+body { margin: 0 }
+html, body, #editor { height: 100% }
+body { padding: 25px }
+.cm-quickinfo-tooltip {
+  white-space: pre;
+}
