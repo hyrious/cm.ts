@@ -12,7 +12,12 @@
     "@codemirror/state": "^6.3.2",
     "@codemirror/view": "^6.22.1",
     "@typescript/vfs": "^1.5.0",
-    "codemirror": "^6.0.1"
+    "codemirror": "^6.0.1",
+    "lib0": "^0.2.88",
+    "y-codemirror.next": "^0.3.2",
+    "y-indexeddb": "^9.0.12",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.10"
   },
   "devDependencies": {
     "@types/node": "20.x",

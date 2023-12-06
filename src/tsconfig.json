@@ -3,6 +3,7 @@
     "strict": true,
     "skipLibCheck": true,
     "lib": ["ESNext", "DOM"],
-    "types": []
+    "types": [],
+    "useDefineForClassFields": false
   }
 }

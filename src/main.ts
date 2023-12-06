@@ -1,12 +1,40 @@
 import './style.css'
 
+import * as Y from 'yjs'
+import * as random from 'lib0/random'
+import { yCollab } from 'y-codemirror.next'
+import { IndexeddbPersistence } from 'y-indexeddb'
 import { EditorView, minimalSetup } from 'codemirror'
 import { EditorState, Compartment } from '@codemirror/state'
-import { hoverTooltip } from '@codemirror/view'
 import { javascript } from '@codemirror/lang-javascript'
-import { autocompletion, completeFromList } from '@codemirror/autocomplete'
-import { linter } from '@codemirror/lint'
-import { reload, sendIPC } from './ipc'
+import { BroadcastChannelProvider } from './y-bc'
+import { tsserver } from './tsserver'
+import { reload } from './ipc'
+
+const doc = new Y.Doc()
+const provider = new BroadcastChannelProvider('cm.ts', doc)
+const persist = new IndexeddbPersistence('cm.ts', doc)
+const text = doc.getText('index.ts')
+const undoManager = new Y.UndoManager(text);
+
+(globalThis as any).persist = persist
+
+const userColor = random.oneOf([
+  { color: '#30bced', light: '#30bced33' },
+  { color: '#6eeb83', light: '#6eeb8333' },
+  { color: '#ffbc42', light: '#ffbc4233' },
+  { color: '#ecd444', light: '#ecd44433' },
+  { color: '#ee6352', light: '#ee635233' },
+  { color: '#9ac2c9', light: '#9ac2c933' },
+  { color: '#8acb88', light: '#8acb8833' },
+  { color: '#1be7ff', light: '#1be7ff33' }
+])
+
+provider.awareness.setLocalStateField('user', {
+  name: Math.random().toString(36).slice(2),
+  color: userColor.color,
+  colorLight: userColor.light
+})
 
 declare const view: EditorView
 
@@ -22,13 +50,12 @@ fetch('https://data.jsdelivr.com/v1/package/npm/typescript').then(r => r.ok && r
           EditorView.editable.of(true),
         ]),
       })
+      view.dom.parentElement!.classList.add('loaded')
     })
   : console.error('Failed to fetch TypeScript versions'));
 
-(globalThis as any).sendIPC = sendIPC;
-
 (globalThis as any).view = new EditorView({
-  doc: sessionStorage.getItem('doc-cache') || `let a = 1`,
+  doc: text.toString(),
   extensions: [
     minimalSetup,
     readOnly.of([
@@ -36,39 +63,8 @@ fetch('https://data.jsdelivr.com/v1/package/npm/typescript').then(r => r.ok && r
       EditorView.editable.of(false),
     ]),
     javascript({ typescript: true }),
-    EditorView.updateListener.of((update) => {
-      if (update.docChanged) {
-        sendIPC({ docChanged: update.state.doc.toString() }).catch(() => [])
-        sessionStorage.setItem('doc-cache', update.state.doc.toString())
-      }
-    }),
-    autocompletion({
-      override: [
-        async (ctx) => {
-          const res = await sendIPC({ autocomplete: ctx.pos }).catch(() => [])
-          if (!('autocomplete' in res) || !res.autocomplete) return null
-          return completeFromList(res.autocomplete)(ctx)
-        }
-      ]
-    }),
-    linter(async () => {
-      const res = await sendIPC({ lint: true }).catch(() => [])
-      if (!('lint' in res) || !res.lint) return []
-      return res.lint
-    }),
-    hoverTooltip(async (_, pos) => {
-      const res = await sendIPC({ hover: pos }).catch(() => [])
-      if (!('hover' in res) || !res.hover) return null
-      return {
-        pos,
-        create() {
-          const dom = document.createElement('div')
-          dom.classList.add('cm-quickinfo-tooltip')
-          dom.textContent = res.hover
-          return { dom }
-        }
-      }
-    }),
+    tsserver,
+    yCollab(text, provider.awareness, { undoManager })
   ],
   parent: document.getElementById('editor')!
 })
