@@ -1,11 +1,11 @@
 import { EditorView } from 'codemirror';
-import { Extension } from '@codemirror/state';
+import { type Extension } from '@codemirror/state';
 import { hoverTooltip } from '@codemirror/view';
 import { autocompletion, completeFromList } from '@codemirror/autocomplete';
 import { linter } from '@codemirror/lint';
 import { sendIPC } from './ipc';
 
-(globalThis as any).sendIPC = sendIPC;
+globalThis.sendIPC = sendIPC;
 
 export const tsserver: Extension = [
   EditorView.updateListener.of((update) => {

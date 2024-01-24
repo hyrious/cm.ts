@@ -1,9 +1,0 @@
-{
-  "compilerOptions": {
-    "strict": true,
-    "skipLibCheck": true,
-    "lib": ["ESNext", "DOM"],
-    "types": [],
-    "useDefineForClassFields": false
-  }
-}

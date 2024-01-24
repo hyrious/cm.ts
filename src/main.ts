@@ -17,7 +17,7 @@ const persist = new IndexeddbPersistence('cm.ts', doc)
 const text = doc.getText('index.ts')
 const undoManager = new Y.UndoManager(text);
 
-(globalThis as any).persist = persist
+globalThis.persist = persist
 
 const userColor = random.oneOf([
   { color: '#30bced', light: '#30bced33' },
@@ -54,7 +54,7 @@ fetch('https://data.jsdelivr.com/v1/package/npm/typescript').then(r => r.ok && r
     })
   : console.error('Failed to fetch TypeScript versions'));
 
-(globalThis as any).view = new EditorView({
+globalThis.view = new EditorView({
   doc: text.toString(),
   extensions: [
     minimalSetup,

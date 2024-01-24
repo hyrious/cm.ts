@@ -130,7 +130,7 @@ export class BroadcastChannelProvider extends ObservableV2<{
     awarenessProtocol.removeAwarenessStates(this.awareness, [this.doc.clientID], 'window unload')
   }
 
-  destroy() {
+  override destroy() {
     this.disconnect()
     window.removeEventListener('unload', this._unloadHandler)
     this.awareness.off('update', this._awarenessHandler)
