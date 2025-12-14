@@ -3,12 +3,14 @@ import type { Diagnostic } from '@codemirror/lint'
 
 export type IPCRequest =
   | { docChanged: string }
+  | { signatureHelp: number }
   | { autocomplete: number }
   | { lint: true }
   | { hover: number }
 
 export type IPCResponse =
   | { docChanged: boolean }
+  | { signatureHelp: import('typescript').SignatureHelpItems | undefined }
   | { autocomplete: Completion[] | undefined }
   | { lint: Diagnostic[] }
   | { hover: string }
@@ -39,19 +41,26 @@ let workerPromise = new Promise<Worker>((resolve, reject) => {
   }
 })
 
+const UNPKGs = ['https://cdn.jsdelivr.net/npm/', 'https://unpkg.shop.jd.com/', 'https://esm.sh/']
+
 async function packageFetch(subpath: string, timeoutMs = 5000): Promise<Response> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort('Timeout'), timeoutMs)
-  try {
-    const response = await fetch(`https://cdn.jsdelivr.net/npm/${subpath}`, { signal: controller.signal })
-    if (response.ok) {
-      clearTimeout(timeout)
-      return response
+  for (const unpkg of UNPKGs) {
+    try {
+      const response = await fetch(`${unpkg}${subpath}`, {
+        signal: AbortSignal.timeout(timeoutMs)
+      })
+      if (response.ok) {
+        return response
+      } else {
+        throw new Error(await response.text())
+      }
+    } catch (err) {
+      if (err?.name == 'AbortError') continue
+      console.error(err)
     }
-  } catch (err) {
-    console.error(err)
   }
-  return fetch(`https://unpkg.com/${subpath}`, { signal: controller.signal })
+  // Final fallback
+  return fetch(`https://unpkg.com/${subpath}`, { signal: AbortSignal.timeout(timeoutMs) })
 }
 
 async function reloadWorker(version: string): Promise<Worker> {

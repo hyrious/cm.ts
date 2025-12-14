@@ -1,13 +1,75 @@
 // Credit: https://github.com/microsoft/TypeScript-Website/blob/v2/packages/ata/src/index.ts
-const builtinModules = new Set([
-  "assert", "assert/strict", "async_hooks", "buffer", "child_process", "cluster", "console",
-  "constants", "crypto", "dgram", "diagnostics_channel", "dns", "dns/promises", "domain", "events",
-  "fs", "fs/promises", "http", "http2", "https", "inspector", "module", "net", "os", "path",
-  "path/posix", "path/win32", "perf_hooks", "process", "punycode", "querystring", "readline",
-  "repl", "stream", "stream/promises", "stream/consumers", "stream/web", "string_decoder", "sys",
-  "timers", "timers/promises", "tls", "trace_events", "tty", "url", "util", "util/types", "v8",
-  "vm", "wasi", "worker_threads", "zlib",
-])
+
+/** Converts some of the known global imports to node so that we grab the right info */
+export const mapModuleNameToModule = (moduleSpecifier: string) => {
+  // in node repl:
+  // > require("module").builtinModules
+  const builtInNodeMods = [
+    "assert",
+    "assert/strict",
+    "async_hooks",
+    "buffer",
+    "child_process",
+    "cluster",
+    "console",
+    "constants",
+    "crypto",
+    "dgram",
+    "diagnostics_channel",
+    "dns",
+    "dns/promises",
+    "domain",
+    "events",
+    "fs",
+    "fs/promises",
+    "http",
+    "http2",
+    "https",
+    "inspector",
+    "inspector/promises",
+    "module",
+    "net",
+    "os",
+    "path",
+    "path/posix",
+    "path/win32",
+    "perf_hooks",
+    "process",
+    "punycode",
+    "querystring",
+    "readline",
+    "repl",
+    "stream",
+    "stream/promises",
+    "stream/consumers",
+    "stream/web",
+    "string_decoder",
+    "sys",
+    "timers",
+    "timers/promises",
+    "tls",
+    "trace_events",
+    "tty",
+    "url",
+    "util",
+    "util/types",
+    "v8",
+    "vm",
+    "wasi",
+    "worker_threads",
+    "zlib",
+  ]
+
+  if (moduleSpecifier.indexOf("node:") === 0 || builtInNodeMods.includes(moduleSpecifier)) {
+    return "node"
+  }
+
+  // strip module filepath e.g. lodash/identity => lodash
+  const [a = "", b = ""] = moduleSpecifier.split("/")
+  const moduleName = a.startsWith("@") ? `${a}/${b}` : a
+
+  return moduleName
+}
 
 export interface Callbacks {
   receivedFile(code: string, path: string): void
@@ -22,41 +84,51 @@ export function setupTypeAcquisition(ts: typeof import("typescript"), delegate: 
   async function resolveDeps(code: string, depth: number) {
     const meta = ts.preProcessFile(code)
     // @ts-ignore
-    const libMap = ts.libMap || new Map()
+    const libMap: Map<string, string> = ts.libMap || new Map()
 
     const deptsToGet = meta.referencedFiles
       .concat(meta.importedFiles)
       .concat(meta.libReferenceDirectives)
-      .filter(f => !f.fileName.endsWith('.d.ts'))
+      .filter(f => !isDtsFile(f.fileName))
       .filter(d => !libMap.has(d.fileName))
       .map(r => {
-        let module = r.fileName
-        if (builtinModules.has(module.replace('node:', ''))) module = 'node'
-        else {
-          const [a = '', b = ''] = module.split('/')
-          module = a[0] === '@' ? `${a}/${b}` : a
+        let version: string | undefined
+        if (!r.fileName.startsWith('.')) {
+          version = 'latest'
+          const line = code.slice(r.end).split('\n')[0]
+          if (line.includes('// types:')) version = line.split('// types: ')[1].trim()
         }
-        return { module, version: 'latest' }
+        return {
+          module: r.fileName,
+          version
+        }
       })
+      .filter((r, index, self) => self.findIndex(m => m.module === r.module && m.version === r.version) === index)
+      .map(ref => ({
+        ...ref,
+        module: mapModuleNameToModule(ref.module)
+      }))
       .filter(f => !f.module.startsWith('.'))
       .filter(m => !moduleMap.has(m.module))
 
     deptsToGet.forEach(dep => moduleMap.add(dep.module))
 
-    const trees = (await Promise.all(deptsToGet.map(f => getFileTreeForModuleWithTag(f.module, f.version))))
-      .filter(t => !("error" in t)) as NPMTreeMeta[]
+    const trees = await Promise.all(deptsToGet.map(f => getFileTreeForModuleWithTag(f.module, f.version)))
+    const treesOnly = trees.filter(t => !("error" in t)) as NPMTreeMeta[]
 
-    const hasDTS = trees.filter(t => t.files.find(f => f.name.endsWith('.d.ts')))
+    const hasDTS = treesOnly.filter(t => t.files.find(f => isDtsFile(f.name)))
     const dtsFilesFromNPM = hasDTS.map(t => treeToDTSFiles(t, `/node_modules/${t.moduleName}`))
 
-    const dtTrees = (await Promise.all(trees.filter(t => !hasDTS.includes(t)).map(f => getFileTreeForModuleWithTag(`@types/${getDTName(f.moduleName)}`, 'latest'))))
-      .filter(t => !("error" in t)) as NPMTreeMeta[]
-    const dtsFilesFromDT = dtTrees.map(t => treeToDTSFiles(t, `/node_modules/@types/${getDTName(t.moduleName).replace("types__", "")}`))
+    const mightBeOnDT = treesOnly.filter(t => !hasDTS.includes(t))
+    const dtTrees = await Promise.all(mightBeOnDT.map(f => getFileTreeForModuleWithTag(`@types/${getDTName(f.moduleName)}`, 'latest')))
+
+    const dtTreesOnly = dtTrees.filter(t => !("error" in t)) as NPMTreeMeta[]
+    const dtsFilesFromDT = dtTreesOnly.map(t => treeToDTSFiles(t, `/node_modules/@types/${getDTName(t.moduleName).replace("types__", "")}`))
 
     const allDTSFiles = dtsFilesFromNPM.concat(dtsFilesFromDT).reduce((p, c) => p.concat(c), [])
-    for (const tree of trees) {
+    for (const tree of treesOnly) {
       let prefix = `/node_modules/${tree.moduleName}`
-      if (dtTrees.includes(tree)) prefix = `/node_modules/@types/${getDTName(tree.moduleName).replace("types__", "")}`
+      if (dtTreesOnly.includes(tree)) prefix = `/node_modules/@types/${getDTName(tree.moduleName).replace("types__", "")}`
       const path = prefix + "/package.json"
       const pkgJSON = await getDTSFileForModuleWithVersion(tree.moduleName, tree.version, "/package.json")
 
@@ -134,7 +206,7 @@ function treeToDTSFiles(tree: NPMTreeMeta, vfsPrefix: string) {
   const dtsRefs: ATADownload[] = []
 
   for (const file of tree.files) {
-    if (file.name.endsWith(".d.ts")) {
+    if (isDtsFile(file.name)) {
       dtsRefs.push({
         moduleName: tree.moduleName,
         moduleVersion: tree.version,
@@ -175,4 +247,8 @@ function getDTName(s: string) {
     s = s.slice(1).replace("/", "__")
   }
   return s
+}
+
+function isDtsFile(file: string) {
+  return /\.d\.([^\.]+\.)?[cm]?ts$/i.test(file)
 }

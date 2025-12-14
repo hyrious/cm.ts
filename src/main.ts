@@ -9,7 +9,7 @@ import { EditorState, Compartment } from '@codemirror/state'
 import { javascript } from '@codemirror/lang-javascript'
 import { BroadcastChannelProvider } from './y-bc'
 import { tsserver } from './tsserver'
-import { reload } from './ipc'
+import { reload, sendIPC } from './ipc'
 
 const doc = new Y.Doc()
 const provider = new BroadcastChannelProvider('cm.ts', doc)
@@ -51,6 +51,7 @@ fetch('https://data.jsdelivr.com/v1/package/npm/typescript').then(r => r.ok && r
         ]),
       })
       view.dom.parentElement!.classList.add('loaded')
+      sendIPC({ docChanged: text.toString() })
     })
   : console.error('Failed to fetch TypeScript versions'));
 

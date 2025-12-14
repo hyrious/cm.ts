@@ -8,6 +8,7 @@ declare const ts: typeof import('typescript')
 
 interface API {
   updateFile(text: string): void
+  getSignatureHelp(position: number): import('typescript').SignatureHelpItems | undefined
   getCompletionsAtPosition(position: number): import('typescript').CompletionInfo | undefined
   getQuickInfoAtPosition(position: number): import('typescript').QuickInfo | undefined
   getDiagnostics(): import('typescript').Diagnostic[]
@@ -43,6 +44,10 @@ const setup = async (version: string): Promise<API> => {
     timer = setTimeout(() => ata(text), 500)
   }
 
+  function getSignatureHelp(position: number) {
+    return env.languageService.getSignatureHelpItems(indexTs, position, void 0)
+  }
+
   function getCompletionsAtPosition(position: number) {
     return env.languageService.getCompletionsAtPosition(indexTs, position, void 0)
   }
@@ -58,7 +63,7 @@ const setup = async (version: string): Promise<API> => {
     return [...syntactic, ...semantic, ...suggestion]
   }
 
-  return { updateFile, getCompletionsAtPosition, getQuickInfoAtPosition, getDiagnostics }
+  return { updateFile, getSignatureHelp, getCompletionsAtPosition, getQuickInfoAtPosition, getDiagnostics }
 }
 
 const handler = function (this: API, e: MessageEvent<IPCRequest>) {
@@ -72,6 +77,11 @@ const handler = function (this: API, e: MessageEvent<IPCRequest>) {
   if ('docChanged' in message) {
     this.updateFile(message.docChanged)
     respond({ docChanged: true })
+  }
+
+  if ('signatureHelp' in message) {
+    const data = this.getSignatureHelp(message.signatureHelp)
+    respond({ signatureHelp: data })
   }
 
   if ('autocomplete' in message) {
